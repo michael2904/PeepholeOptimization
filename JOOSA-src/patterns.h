@@ -84,6 +84,36 @@ int simplify_istore(CODE **c)
 }
 
 /* TOOO CHECK
+ * astore x
+ * aload x
+ * -------->
+ */
+int simplify_astore_aload(CODE **c)
+{ int x,y;
+	if (is_astore(*c,&x) &&
+			is_aload(next(*c),&y)) {
+		if(x == y) return replace(c,2,NULL);
+		return 0;
+	}
+	return 0;
+}
+
+/* TOOO CHECK
+ * astore x
+ * aload x
+ * -------->
+ */
+int simplify_istore_iload(CODE **c)
+{ int x,y;
+	if (is_istore(*c,&x) &&
+			is_iload(next(*c),&y)) {
+		if(x == y) return replace(c,2,NULL);
+		return 0;
+	}
+	return 0;
+}
+
+/* TOOO CHECK
  * dup
  * ifeq x
  * pop
@@ -179,11 +209,15 @@ int simplify_goto_goto(CODE **c)
 	}
 	return 0;
 }
+
+
 void init_patterns(void) {
 	ADD_PATTERN(simplify_multiplication_right);
 	ADD_PATTERN(simplify_division_by_one);
 	ADD_PATTERN(simplify_astore);
 	ADD_PATTERN(simplify_istore);
+	ADD_PATTERN(simplify_astore_aload);
+	ADD_PATTERN(simplify_istore_iload);
 	ADD_PATTERN(positive_increment);
 	ADD_PATTERN(negative_increment);
 	ADD_PATTERN(simplify_goto_goto);
