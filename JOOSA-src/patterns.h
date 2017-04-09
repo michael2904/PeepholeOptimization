@@ -232,10 +232,68 @@ int negative_increment(CODE **c)
  */
 int simplify_goto_goto(CODE **c)
 { int l1,l2;
-	if (is_goto(*c,&l1) && is_goto(next(destination(l1)),&l2) && l1>l2) {
-		 droplabel(l1);
-		 copylabel(l2);
-		 return replace(c,1,makeCODEgoto(l2,NULL));
+	if (is_goto(*c,&l1) &&
+		is_goto(next(destination(l1)),&l2) && l1>l2) {
+		droplabel(l1);
+		copylabel(l2);
+		return replace(c,1,makeCODEgoto(l2,NULL));
+	}
+	return 0;
+}
+
+/* TOOO CHECK
+ * iconst_k1
+ * if_icmpne l1
+ * iconst_k2
+ * goto l2
+ * l1:
+ * iconst_k3
+ * l2:
+ * ifeq l3
+ * --------->
+ * ifeq l3 
+ */
+int simplify_comp_not_eq_zero(CODE **c)
+{ int l1,l11,l2,l22,l3,k1,k2,k3;
+	if ((is_ldc_int(*c,&k1) && k1 == 0) &&
+		is_if_icmpne(next(*c),&l1) &&
+		(is_ldc_int(next(next(*c)),&k2) && k2 == 0) &&
+		is_goto(next(next(next(*c))),&l2) &&
+		(is_label(next(next(next(next(*c)))),&l11) && l1 == l11) &&
+		(is_ldc_int(next(next(next(next(next(*c))))),&k3) && k3 == 1)&&
+		(is_label(next(next(next(next(next(next(*c)))))),&l22) && l2 == l22) &&
+		is_ifeq(next(next(next(next(next(next(next(*c))))))),&l3)
+		){
+		return replace(c,8,makeCODEifeq(l3,NULL));
+	}
+	return 0;
+}
+
+
+/* TOOO CHECK
+ * iconst_k1
+ * if_icmpeq l1
+ * iconst_k2
+ * goto l2
+ * l1:
+ * iconst_k3
+ * l2:
+ * ifeq l3
+ * --------->
+ * ifne l3 
+ */
+int simplify_comp_eq_zero(CODE **c)
+{ int l1,l11,l2,l22,l3,k1,k2,k3;
+	if ((is_ldc_int(*c,&k1) && k1 == 0) &&
+		is_if_icmpeq(next(*c),&l1) &&
+		(is_ldc_int(next(next(*c)),&k2) && k2 == 0) &&
+		is_goto(next(next(next(*c))),&l2) &&
+		(is_label(next(next(next(next(*c)))),&l11) && l1 == l11) &&
+		(is_ldc_int(next(next(next(next(next(*c))))),&k3) && k3 == 1)&&
+		(is_label(next(next(next(next(next(next(*c)))))),&l22) && l2 == l22) &&
+		is_ifeq(next(next(next(next(next(next(next(*c))))))),&l3)
+		){
+		return replace(c,8,makeCODEifne(l3,NULL));
 	}
 	return 0;
 }
@@ -253,6 +311,8 @@ void init_patterns(void) {
 	ADD_PATTERN(positive_increment);
 	ADD_PATTERN(negative_increment);
 	ADD_PATTERN(simplify_goto_goto);
+	ADD_PATTERN(simplify_comp_not_eq_zero);
+	ADD_PATTERN(simplify_comp_eq_zero);
 	ADD_PATTERN(simplify_ifeq);
 	ADD_PATTERN(simplify_ifne);
 }
