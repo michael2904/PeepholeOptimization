@@ -28,6 +28,11 @@
 extern int lineno;
 %}
 
+%option noyywrap
+%option nounput
+%option noinput
+%option yylineno
+
 /* Declaring comment start condition - Added by David */
 %x comment
 

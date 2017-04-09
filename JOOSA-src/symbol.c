@@ -146,7 +146,7 @@ void symInterfaceFIELD(FIELD *f, SymbolTable *sym)
 void symInterfaceCONSTRUCTOR(CONSTRUCTOR *c, char *classname, SymbolTable *sym)
 { if (c!=NULL) {
      symInterfaceCONSTRUCTOR(c->next,classname,sym);
-     if (!strcmp(classname,c->name)==0) {
+     if (!(strcmp(classname,c->name) == 0)) {
         reportStrError("constructor name %s different from class name",
                          c->name,c->lineno);
      }
