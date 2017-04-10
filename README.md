@@ -3,6 +3,21 @@ COMP520_CodeOptimization
 Michael Abdallah-Minciotti
 Clovis Rigout
 
+SETUP:
+	- Need to set environment variable $PEEPDIR to point to this directory
+	- To Run all benchmarks:
+		- ./count.sh
+	- To Run individual Benchmarks:
+		- Go to benchmark directory
+		- type :
+			- make OR
+			- $PEEPDIR/joosc *.java OR 
+			- $PEEPDIR/joosc -O *.java (for optimized)
+
+NOTES:
+	- Optimization patters are in JOOSA-src/patters.h
+	- 
+
 
 Possible optimizations:
 	- L1 ... L2 ---> L2 and change all L1 to L2

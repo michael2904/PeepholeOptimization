@@ -37,7 +37,7 @@ int simplify_multiplication_right(CODE **c)
  * ldc 1
  * idiv
  * ------>
- * ldc x
+ * iload x
  */
 
 int simplify_division_by_one(CODE **c)
@@ -47,6 +47,29 @@ int simplify_division_by_one(CODE **c)
 			is_idiv(next(next(*c)))) {
 		if (k==1) return replace(c,3,makeCODEiload(x,NULL));
 		return 0;
+	}
+	return 0;
+}
+
+/* TOOO CHECK
+ * iload x   | ldc 1
+ * ldc 1     | iload x
+ * imul      | imul
+ * ------>   | ------->
+ * iload x   | iload x
+ */
+
+int simplify_multiplication_by_one(CODE **c)
+{ int x,k;
+	if (is_iload(*c,&x) && 
+			is_ldc_int(next(*c),&k) && 
+			is_imul(next(next(*c)))) {
+		if (k==1) return replace(c,3,makeCODEiload(x,NULL));
+		return 0;
+	} else if(is_ldc_int(*c,&k) &&
+				is_iload(next(*c), &x) &&
+				is_imul(next(next(*c)))) {
+		if(k==1) return replace(c,3,makeCODEiload(x,NULL));
 	}
 	return 0;
 }
@@ -298,10 +321,70 @@ int simplify_comp_eq_zero(CODE **c)
 	return 0;
 }
 
+/* TOOOO CHECK
+  ldc "init"
+  dup
+  aload
+  swap
+  putfield Interpretor/state Ljava/lang/String;
+  pop
+-------->
+  aload
+  ldc "init"
+  putfield Interpretor/state Ljava/lang/String;
+*/
+int simplify_string_decl(CODE **c){
+	int x;
+	char *s1;
+	char *s2;
+	if(is_ldc_string(*c, &s1) &&
+		is_dup(next(*c)) &&
+		is_aload(next(next(*c)), &x) &&
+		is_swap(next(next(next(*c)))) &&
+		is_putfield(next(next(next(next(*c)))), &s2) &&
+		is_pop(next(next(next(next(next(*c))))))){
+			return replace(c, 6, makeCODEaload(x, makeCODEldc_string(s1, makeCODEputfield(s2, NULL))));
+	}
+	return 0;
+}
+
+// TOOOOO CHECK
+/*                                                      ~
+  new Conversion                                        conv
+  dup                                                   conv conv
+  invokenonvirtual Conversion/<init>()V                 conv
+  dup                                                   conv conv
+  aload_0                                               self conv conv
+  swap                                                  conv self conv
+  putfield Decoder/con LConversion;                     conv
+  pop                                                   ~
+ ------->
+  aload_0                                               self
+  new Conversion                                        conv self
+  dup                                                   conv conv self
+  invokenonvirtual Conversion/<init>()V                 conv self
+  putfield Decoder/con LConversion;                     ~
+*/
+int simplify_object_assignment(CODE **c){
+	char *o1, *v1, *f1;
+	int x;
+	if(is_new(*c, &o1) &&
+		is_dup(next(*c)) &&
+		is_invokenonvirtual(next(next(*c)), &v1) &&
+		is_dup(next(next(next(*c)))) &&
+		is_aload(next(next(next(next(*c)))), &x) &&
+		is_swap(next(next(next(next(next(*c)))))) &&
+		is_putfield(next(next(next(next(next(next(*c)))))), &f1) &&
+		is_pop(next(next(next(next(next(next(next(*c))))))))){
+			return replace(c, 8, makeCODEaload(x, makeCODEnew(o1, makeCODEdup(makeCODEinvokenonvirtual(v1, makeCODEputfield(f1, NULL))))));
+	}
+	return 0;
+} 
 
 void init_patterns(void) {
 	ADD_PATTERN(simplify_multiplication_right);
 	ADD_PATTERN(simplify_division_by_one);
+	ADD_PATTERN(simplify_multiplication_by_one);
 	ADD_PATTERN(simplify_astore);
 	ADD_PATTERN(simplify_istore);
 	ADD_PATTERN(simplify_astore_aload);
@@ -315,4 +398,6 @@ void init_patterns(void) {
 	ADD_PATTERN(simplify_comp_eq_zero);
 	ADD_PATTERN(simplify_ifeq);
 	ADD_PATTERN(simplify_ifne);
+	ADD_PATTERN(simplify_string_decl);
+	ADD_PATTERN(simplify_object_assignment);
 }
