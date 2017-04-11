@@ -358,7 +358,7 @@ int simplify_object_assignment(CODE **c){
 
 
 
-/* TOOO CHECK
+/* DONE
  * goto/any branching L1
  * ...
  * goto/any branching L2
@@ -420,7 +420,7 @@ int simplify_goto_consec_label(CODE **c)
 	return 0;
 }
 
-/* TOOO CHECK
+/* DONE
  * L1:        dead
  * ----->
  *
