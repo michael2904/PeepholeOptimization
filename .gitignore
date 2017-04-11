@@ -36,3 +36,6 @@
 *.j
 *.dump
 *.optdump
+joos
+joosc
+joosc.windows
