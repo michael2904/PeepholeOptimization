@@ -32,6 +32,28 @@ int simplify_multiplication_right(CODE **c)
 	return 0;
 }
 
+/* iload x 1       iload x        iload x
+ * ldc 0   2       ldc 1          ldc 2
+ * imul    1       imul           imul
+ * ------>        ------>        ------>
+ * ldc 0   1       iload x        iload x
+ *                                dup
+ *                                iadd
+ */
+
+int simplify_multiplication_right_inverse(CODE **c)
+{ int x,k;
+	if (is_ldc_int(*c,&k) && 
+			is_iload(next(*c),&x) && 
+			is_imul(next(next(*c)))) {
+		 if (k==0) return replace(c,3,makeCODEldc_int(0,NULL));
+		 else if (k==1) return replace(c,3,makeCODEiload(x,NULL));
+		 else if (k==2) return replace(c,3,makeCODEiload(x,makeCODEdup(makeCODEiadd(NULL))));
+		 return 0;
+	}
+	return 0;
+}
+
 /* DONE
  * iload x   +1
  * ldc 1     +1
@@ -40,12 +62,29 @@ int simplify_multiplication_right(CODE **c)
  * iload x   +1
  */
 
-/* ----- Duplicate for inverse order ldc then iload */
-
 int simplify_division_by_one(CODE **c)
 { int x,k;
 	if (is_iload(*c,&x) && 
 			is_ldc_int(next(*c),&k) && 
+			is_idiv(next(next(*c)))) {
+		if (k==1) return replace(c,3,makeCODEiload(x,NULL));
+		return 0;
+	}
+	return 0;
+}
+
+/* DONE
+ * iload x   +1
+ * ldc 1     +1
+ * idiv      -1
+ * ------>
+ * iload x   +1
+ */
+
+int simplify_division_by_one_inverse(CODE **c)
+{ int x,k;
+	if (is_ldc_int(*c,&k) && 
+			is_iload(next(*c),&x) && 
 			is_idiv(next(next(*c)))) {
 		if (k==1) return replace(c,3,makeCODEiload(x,NULL));
 		return 0;
@@ -172,10 +211,14 @@ int negative_increment(CODE **c)
 
 /* goto L1
  * ...
+ * goto L1
+ * ...
  * L1:
  * goto L2
  * ...
  * L2:
+ * ...
+ * goto L1
  * --------->
  * goto L2
  * ...
@@ -191,7 +234,7 @@ int simplify_goto_goto(CODE **c)
 		is_goto(next(destination(l1)),&l2) && l1>l2) {
 		droplabel(l1);
 		copylabel(l2);
-		return (replace(c,1,makeCODEgoto(l2,NULL)));
+		return (replace_modified(c,1,makeCODEgoto(l2,NULL)));
 	}
 	return 0;
 }
@@ -330,6 +373,68 @@ int simplify_object_assignment(CODE **c){
  * L1:       (reference count reduced by 1)
  * L2:       (reference count increased by 1)  
  */
+int simplify_goto_consec_label(CODE **c)
+{ int l1,l2;
+	CODE *dest;
+	if (is_goto(*c,&l1) || is_if(c,&l1)){
+		dest = destination(l1);
+		while(dest != NULL){
+			if (is_label(next(dest),&l2)){
+				dest = next(dest);
+			}else{
+				break;
+			}
+		}
+		if(l1>l2){
+			droplabel(l1);
+			copylabel(l2);
+			if(is_goto(*c,&l1)){
+				return (replace_modified(c,1,makeCODEgoto(l2,NULL)));
+			}else if(is_ifeq(*c,&l1)){
+				return (replace_modified(c,1,makeCODEifeq(l2,NULL)));
+			}else if(is_ifne(*c,&l1)){
+				return (replace_modified(c,1,makeCODEifne(l2,NULL)));
+			}else if(is_if_acmpeq(*c,&l1)){
+				return (replace_modified(c,1,makeCODEif_acmpeq(l2,NULL)));
+			}else if(is_if_acmpne(*c,&l1)){
+				return (replace_modified(c,1,makeCODEif_acmpne(l2,NULL)));
+			}else if(is_ifnull(*c,&l1)){
+				return (replace_modified(c,1,makeCODEifnull(l2,NULL)));
+			}else if(is_ifnonnull(*c,&l1)){
+				return (replace_modified(c,1,makeCODEifnonnull(l2,NULL)));
+			}else if(is_if_icmpeq(*c,&l1)){
+				return (replace_modified(c,1,makeCODEif_icmpeq(l2,NULL)));
+			}else if(is_if_icmpgt(*c,&l1)){
+				return (replace_modified(c,1,makeCODEif_icmpgt(l2,NULL)));
+			}else if(is_if_icmplt(*c,&l1)){
+				return (replace_modified(c,1,makeCODEif_icmplt(l2,NULL)));
+			}else if(is_if_icmple(*c,&l1)){
+				return (replace_modified(c,1,makeCODEif_icmple(l2,NULL)));
+			}else if(is_if_icmpge(*c,&l1)){
+				return (replace_modified(c,1,makeCODEif_icmpge(l2,NULL)));
+			}else if(is_if_icmpne(*c,&l1)){
+				return (replace_modified(c,1,makeCODEif_icmpne(l2,NULL)));
+			}
+		}
+	}
+	return 0;
+}
+
+/* TOOO CHECK
+ * L1:        dead
+ * ----->
+ *
+ */
+int simplify_dead_label(CODE **c)
+{ int l1;
+	if (is_label(*c,&l1) && deadlabel(l1)) {
+		return kill_line(c);
+	}
+	return 0;
+}
+
+
+
 
 
 
@@ -355,7 +460,9 @@ int simplify_object_assignment(CODE **c){
 
 void init_patterns(void) {
 	ADD_PATTERN(simplify_multiplication_right);
+	ADD_PATTERN(simplify_multiplication_right_inverse);
 	ADD_PATTERN(simplify_division_by_one);
+	ADD_PATTERN(simplify_division_by_one_inverse);
 	ADD_PATTERN(simplify_astore);
 	ADD_PATTERN(simplify_istore);
 	ADD_PATTERN(simplify_aload_astore);
@@ -367,4 +474,6 @@ void init_patterns(void) {
 	ADD_PATTERN(simplify_comp_eq_zero);
 	ADD_PATTERN(simplify_string_decl);
 	ADD_PATTERN(simplify_object_assignment);
+	ADD_PATTERN(simplify_goto_consec_label);
+	ADD_PATTERN(simplify_dead_label);
 }
