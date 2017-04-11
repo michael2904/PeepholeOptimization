@@ -24,6 +24,7 @@ for BENCH_DIR in PeepholeBenchmarks/*/; do
 	echo "-------------"
 	echo -e -n "\033[0m"
 	make -C $BENCH_DIR
+	make -C $BENCH_DIR run
 
 	echo
 	echo -e "\033[32m-------------"
@@ -31,6 +32,7 @@ for BENCH_DIR in PeepholeBenchmarks/*/; do
 	echo "-------------"
 	echo -e -n "\033[0m"
 	make -C $BENCH_DIR opt
+	make -C $BENCH_DIR run
 
 	echo
 	echo -e "\033[32m-------------"
