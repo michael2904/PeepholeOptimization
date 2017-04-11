@@ -240,64 +240,7 @@ int simplify_goto_goto(CODE **c)
 }
 
 /* DONE
- * iconst_k1  k1==0   +1
- * if_icmpne l1       -2
- * iconst_k2  k2==0   +1  1/2
- * goto l2
- * l1:
- * iconst_k3  k3==1   +1  2/2
- * l2:
- * ifeq l3            -1
- * --------->
- * ifeq l3            -1
- */
-int simplify_comp_not_eq_zero(CODE **c)
-{ int l1,l11,l2,l22,l3,k1,k2,k3;
-	if ((is_ldc_int(*c,&k1) && k1 == 0) &&
-		is_if_icmpne(next(*c),&l1) &&
-		(is_ldc_int(next(next(*c)),&k2) && k2 == 0) &&
-		is_goto(next(next(next(*c))),&l2) &&
-		(is_label(next(next(next(next(*c)))),&l11) && l1 == l11) &&
-		(is_ldc_int(next(next(next(next(next(*c))))),&k3) && k3 == 1)&&
-		(is_label(next(next(next(next(next(next(*c)))))),&l22) && l2 == l22) &&
-		is_ifeq(next(next(next(next(next(next(next(*c))))))),&l3)
-		){
-		return replace(c,8,makeCODEifeq(l3,NULL));
-	}
-	return 0;
-}
-
-
-/* DONE
- * iconst_k1
- * if_icmpeq l1
- * iconst_k2
- * goto l2
- * l1:
- * iconst_k3
- * l2:
- * ifeq l3
- * --------->
- * ifne l3 
- */
-int simplify_comp_eq_zero(CODE **c)
-{ int l1,l11,l2,l22,l3,k1,k2,k3;
-	if ((is_ldc_int(*c,&k1) && k1 == 0) &&
-		is_if_icmpeq(next(*c),&l1) &&
-		(is_ldc_int(next(next(*c)),&k2) && k2 == 0) &&
-		is_goto(next(next(next(*c))),&l2) &&
-		(is_label(next(next(next(next(*c)))),&l11) && l1 == l11) &&
-		(is_ldc_int(next(next(next(next(next(*c))))),&k3) && k3 == 1)&&
-		(is_label(next(next(next(next(next(next(*c)))))),&l22) && l2 == l22) &&
-		is_ifeq(next(next(next(next(next(next(next(*c))))))),&l3)
-		){
-		return replace(c,8,makeCODEifne(l3,NULL));
-	}
-	return 0;
-}
-
-/* DONE
-  ldc "init"    +1
+  (ldc || iload || aload)        +1
   dup           +1
   aload         +1
   swap           0
@@ -305,11 +248,11 @@ int simplify_comp_eq_zero(CODE **c)
   pop           -1
 -------->
   aload         +1
-  ldc "init"    +1
+  (ldc || iload || aload)    +1
   putfield Interpretor/state Ljava/lang/String;  -2
 */
-int simplify_string_decl(CODE **c){
-	int x;
+int simplify_swap_put_field(CODE **c){
+	int x, k;
 	char *s1;
 	char *s2;
 	if(is_ldc_string(*c, &s1) &&
@@ -319,6 +262,51 @@ int simplify_string_decl(CODE **c){
 		is_putfield(next(next(next(next(*c)))), &s2) &&
 		is_pop(next(next(next(next(next(*c))))))){
 			return replace(c, 6, makeCODEaload(x, makeCODEldc_string(s1, makeCODEputfield(s2, NULL))));
+	} else if(is_ldc_int(*c, &k) &&
+		is_dup(next(*c)) &&
+		is_aload(next(next(*c)), &x) &&
+		is_swap(next(next(next(*c)))) &&
+		is_putfield(next(next(next(next(*c)))), &s2) &&
+		is_pop(next(next(next(next(next(*c))))))){
+			return replace(c, 6, makeCODEaload(x, makeCODEldc_int(k, makeCODEputfield(s2, NULL))));
+	} else if(is_iload(*c, &k) &&
+		is_dup(next(*c)) &&
+		is_aload(next(next(*c)), &x) &&
+		is_swap(next(next(next(*c)))) &&
+		is_putfield(next(next(next(next(*c)))), &s2) &&
+		is_pop(next(next(next(next(next(*c))))))){
+			return replace(c, 6, makeCODEaload(x, makeCODEiload(k, makeCODEputfield(s2, NULL))));
+	} else if(is_aload(*c, &k) &&
+		is_dup(next(*c)) &&
+		is_aload(next(next(*c)), &x) &&
+		is_swap(next(next(next(*c)))) &&
+		is_putfield(next(next(next(next(*c)))), &s2) &&
+		is_pop(next(next(next(next(next(*c))))))){
+			return replace(c, 6, makeCODEaload(x, makeCODEaload(k, makeCODEputfield(s2, NULL))));
+	}
+	return 0;
+}
+
+/* CHECK
+  dup           +1
+  aload         +1
+  swap           0
+  putfield Interpretor/state Ljava/lang/String;  -2
+  pop           -1
+-------->
+  aload         +1
+  swap
+  putfield Interpretor/state Ljava/lang/String;  -2
+*/
+int simplify_put_field(CODE **c){
+	int x;
+	char *s;
+	if(	is_dup(*c) &&
+		is_aload(next(*c), &x) &&
+		is_swap(next(next(*c))) &&
+		is_putfield(next(next(next(*c))), &s) &&
+		is_pop(next(next(next(next(*c)))))){
+			return replace(c, 5, makeCODEaload(x, makeCODEswap(makeCODEputfield(s, NULL))));
 	}
 	return 0;
 }
@@ -458,6 +446,164 @@ int simplify_dead_label(CODE **c)
  * 		substract and use the comparison ifeq... with 0
  */
 
+ /*
+ * if_icmpne l1       -2
+ * iconst_k2  k2==0   +1  1/2
+ * goto l2
+ * l1:
+ * iconst_k3  k3==1   +1  2/2
+ * l2:
+ * ifeq l3            -1
+ * --------->
+ * if_icmpeq l3
+ */
+ int simplify_generic_comp_not_eq(CODE **c)
+{ int l1,l11,l2,l22,l3,k2,k3;
+	if (is_if_icmpne(*c,&l1) &&
+		(is_ldc_int(next(*c),&k2) && k2 == 0) &&
+		is_goto(next(next(*c)),&l2) &&
+		(is_label(next(next(next(*c))),&l11) && l1 == l11) &&
+		(is_ldc_int(next(next(next(next(*c)))),&k3) && k3 == 1)&&
+		(is_label(next(next(next(next(next(*c))))),&l22) && l2 == l22) &&
+		is_ifeq(next(next(next(next(next(next(*c)))))),&l3)
+		){
+		return replace(c,7,makeCODEif_icmpeq(l3,NULL));
+	}
+	return 0;
+}
+
+/*
+ * if_icmpeq l1
+ * iconst_k2
+ * goto l2
+ * l1:
+ * iconst_k3
+ * l2:
+ * ifeq l3
+ * --------->
+ * if_icmpne l3 
+*/
+ int simplify_generic_comp_eq(CODE **c)
+{ int l1,l11,l2,l22,l3,k2,k3;
+	if (is_if_icmpeq(*c,&l1) &&
+		(is_ldc_int(next(*c),&k2) && k2 == 0) &&
+		is_goto(next(next(*c)),&l2) &&
+		(is_label(next(next(next(*c))),&l11) && l1 == l11) &&
+		(is_ldc_int(next(next(next(next(*c)))),&k3) && k3 == 1)&&
+		(is_label(next(next(next(next(next(*c))))),&l22) && l2 == l22) &&
+		is_ifeq(next(next(next(next(next(next(*c)))))),&l3)
+		){
+		return replace(c,7,makeCODEif_icmpne(l3,NULL));
+	}
+	return 0;
+}
+
+/*
+ * if_icmplt l1
+ * iconst_k2  //k2 == 0
+ * goto l2
+ * l1:
+ * iconst_k3  // k3 == 1
+ * l2:
+ * ifeq l3  if(k == 0) goto l3
+ * --------->
+ * if_icmpge l3 
+*/
+ int simplify_generic_comp_lt(CODE **c)
+{ int l1,l11,l2,l22,l3,k2,k3;
+	if (is_if_icmplt(*c,&l1) &&
+		(is_ldc_int(next(*c),&k2) && k2 == 0) &&
+		is_goto(next(next(*c)),&l2) &&
+		(is_label(next(next(next(*c))),&l11) && l1 == l11) &&
+		(is_ldc_int(next(next(next(next(*c)))),&k3) && k3 == 1)&&
+		(is_label(next(next(next(next(next(*c))))),&l22) && l2 == l22) &&
+		is_ifeq(next(next(next(next(next(next(*c)))))),&l3)
+		){
+		return replace(c,7,makeCODEif_icmpge(l3,NULL));
+	}
+	return 0;
+}
+
+/*
+ * if_icmple l1
+ * iconst_k2  //k2 == 0
+ * goto l2
+ * l1:
+ * iconst_k3  // k3 == 1
+ * l2:
+ * ifeq l3  if(k == 0) goto l3
+ * --------->
+ * if_icmpgt l3 
+*/
+ int simplify_generic_comp_le(CODE **c)
+{ int l1,l11,l2,l22,l3,k2,k3;
+	if (is_if_icmple(*c,&l1) &&
+		(is_ldc_int(next(*c),&k2) && k2 == 0) &&
+		is_goto(next(next(*c)),&l2) &&
+		(is_label(next(next(next(*c))),&l11) && l1 == l11) &&
+		(is_ldc_int(next(next(next(next(*c)))),&k3) && k3 == 1)&&
+		(is_label(next(next(next(next(next(*c))))),&l22) && l2 == l22) &&
+		is_ifeq(next(next(next(next(next(next(*c)))))),&l3)
+		){
+		return replace(c,7,makeCODEif_icmpgt(l3,NULL));
+	}
+	return 0;
+}
+
+/*
+ * if_icmpgt l1
+ * iconst_k2  //k2 == 0
+ * goto l2
+ * l1:
+ * iconst_k3  // k3 == 1
+ * l2:
+ * ifeq l3  if(k == 0) goto l3
+ * --------->
+ * if_icmple l3 
+*/
+ int simplify_generic_comp_gt(CODE **c)
+{ int l1,l11,l2,l22,l3,k2,k3;
+	if (is_if_icmple(*c,&l1) &&
+		(is_ldc_int(next(*c),&k2) && k2 == 0) &&
+		is_goto(next(next(*c)),&l2) &&
+		(is_label(next(next(next(*c))),&l11) && l1 == l11) &&
+		(is_ldc_int(next(next(next(next(*c)))),&k3) && k3 == 1)&&
+		(is_label(next(next(next(next(next(*c))))),&l22) && l2 == l22) &&
+		is_ifeq(next(next(next(next(next(next(*c)))))),&l3)
+		){
+		return replace(c,7,makeCODEif_icmple(l3,NULL));
+	}
+	return 0;
+}
+
+/*
+ * if_icmpge l1
+ * iconst_k2  //k2 == 0
+ * goto l2
+ * l1:
+ * iconst_k3  // k3 == 1
+ * l2:
+ * ifeq l3  if(k == 0) goto l3
+ * --------->
+ * if_icmplt l3 
+*/
+ int simplify_generic_comp_ge(CODE **c)
+{ int l1,l11,l2,l22,l3,k2,k3;
+	if (is_if_icmple(*c,&l1) &&
+		(is_ldc_int(next(*c),&k2) && k2 == 0) &&
+		is_goto(next(next(*c)),&l2) &&
+		(is_label(next(next(next(*c))),&l11) && l1 == l11) &&
+		(is_ldc_int(next(next(next(next(*c)))),&k3) && k3 == 1)&&
+		(is_label(next(next(next(next(next(*c))))),&l22) && l2 == l22) &&
+		is_ifeq(next(next(next(next(next(next(*c)))))),&l3)
+		){
+		return replace(c,7,makeCODEif_icmplt(l3,NULL));
+	}
+	return 0;
+}
+
+
+
 void init_patterns(void) {
 	ADD_PATTERN(simplify_multiplication_right);
 	ADD_PATTERN(simplify_multiplication_right_inverse);
@@ -470,10 +616,15 @@ void init_patterns(void) {
 	ADD_PATTERN(positive_increment);
 	ADD_PATTERN(negative_increment);
 	ADD_PATTERN(simplify_goto_goto);
-	ADD_PATTERN(simplify_comp_not_eq_zero);
-	ADD_PATTERN(simplify_comp_eq_zero);
-	ADD_PATTERN(simplify_string_decl);
+	ADD_PATTERN(simplify_swap_put_field);
+	ADD_PATTERN(simplify_put_field);
 	ADD_PATTERN(simplify_object_assignment);
+	ADD_PATTERN(simplify_generic_comp_not_eq);
+	ADD_PATTERN(simplify_generic_comp_eq);
+	ADD_PATTERN(simplify_generic_comp_lt);
+	ADD_PATTERN(simplify_generic_comp_le);
+	ADD_PATTERN(simplify_generic_comp_gt);
+	ADD_PATTERN(simplify_generic_comp_ge);
 	ADD_PATTERN(simplify_goto_consec_label);
 	ADD_PATTERN(simplify_dead_label);
 }
