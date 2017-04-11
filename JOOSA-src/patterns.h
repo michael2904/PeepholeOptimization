@@ -15,8 +15,8 @@
  * imul    1       imul           imul
  * ------>        ------>        ------>
  * ldc 0   1       iload x        iload x
- *                               dup
- *                               iadd
+ *                                dup
+ *                                iadd
  */
 
 int simplify_multiplication_right(CODE **c)
@@ -32,13 +32,15 @@ int simplify_multiplication_right(CODE **c)
 	return 0;
 }
 
-/* TOOO CHECK
- * iload x   1
- * ldc 1     2
- * idiv      1
+/* DONE
+ * iload x   +1
+ * ldc 1     +1
+ * idiv      -1
  * ------>
- * iload x   1
+ * iload x   +1
  */
+
+/* ----- Duplicate for inverse order ldc then iload */
 
 int simplify_division_by_one(CODE **c)
 { int x,k;
@@ -67,7 +69,8 @@ int simplify_astore(CODE **c)
 	return 0;
 }
 
-/* dup       +1
+/* DONE
+ * dup       +1
  * istore x  -1
  * pop       -1
  * -------->
@@ -83,7 +86,7 @@ int simplify_istore(CODE **c)
 	return 0;
 }
 
-/* TOOO CHECK
+/* DONE
  * aload x  +1
  * astore x -1
  * -------->
@@ -98,7 +101,7 @@ int simplify_aload_astore(CODE **c)
 	return 0;
 }
 
-/* TOOO CHECK
+/* DONE
  * iload x   +1
  * istore x  -1
  * -------->
@@ -113,39 +116,19 @@ int simplify_iload_istore(CODE **c)
 	return 0;
 }
 
-/* TOOO CHECK  ************ DOESN'T WORK 
+/* DOESN'T WORK ******* LOOK AGAIN LATER
  * dup     +1
- * ifeq x
- * pop     -1
+ * ifeq L1 -1
+ * pop     -1 1/2
+ * ...
+ * L1:
+ * pop     -1 2/2
  * -------->
- * ifeq x
+ * ifeq L1
+ * ...
+ * L1:
  *
-int simplify_ifeq(CODE **c)
-{ int x;
-	if (is_dup(*c) &&
-			is_ifeq(next(*c),&x) &&
-			is_pop(next(next(*c)))) {
-		 return replace(c,3,makeCODEifeq(x,NULL));
-	}
-	return 0;
-}
-
-* TOOO CHECK  ************ DOESN'T WORK 
- * dup     +1
- * ifne x
- * pop     -1
- * -------->
- * ifne x
- *
-int simplify_ifne(CODE **c)
-{ int x;
-	if (is_dup(*c) &&
-			is_ifne(next(*c),&x) &&
-			is_pop(next(next(*c)))) {
-		 return replace(c,3,makeCODEifne(x,NULL));
-	}
-	return 0;
-}*/
+ */
 
 /* iload x              +1
  * ldc k   (0<=k<=127)  +1
@@ -166,7 +149,7 @@ int positive_increment(CODE **c)
 	return 0;
 }
 
-/* TOOO CHECK
+/* DONE
  * iload x             +1
  * ldc k   (0<=k<=127) +1
  * isub                -1
@@ -185,23 +168,6 @@ int negative_increment(CODE **c)
 	}
 	return 0;
 }
-
-
-/* TOOO CHECK
- * goto/any branching L1
- * ...
- * goto/any branching L2
- * ...
- * L1:
- * L2:
- * --------->
- * goto/any branching L2
- * ...
- * goto/any branching L2
- * ...
- * L1:       (reference count reduced by 1)
- * L2:       (reference count increased by 1)  
- */
 
 
 /* goto L1
@@ -230,17 +196,17 @@ int simplify_goto_goto(CODE **c)
 	return 0;
 }
 
-/* TOOO CHECK
- * iconst_k1     +1
- * if_icmpne l1  
- * iconst_k2
+/* DONE
+ * iconst_k1  k1==0   +1
+ * if_icmpne l1       -2
+ * iconst_k2  k2==0   +1  1/2
  * goto l2
  * l1:
- * iconst_k3
+ * iconst_k3  k3==1   +1  2/2
  * l2:
- * ifeq l3
+ * ifeq l3            -1
  * --------->
- * ifeq l3 
+ * ifeq l3            -1
  */
 int simplify_comp_not_eq_zero(CODE **c)
 { int l1,l11,l2,l22,l3,k1,k2,k3;
@@ -259,7 +225,7 @@ int simplify_comp_not_eq_zero(CODE **c)
 }
 
 
-/* TOOO CHECK
+/* DONE
  * iconst_k1
  * if_icmpeq l1
  * iconst_k2
@@ -287,17 +253,17 @@ int simplify_comp_eq_zero(CODE **c)
 	return 0;
 }
 
-/* TOOOO CHECK Clovis
-  ldc "init"
-  dup
-  aload
-  swap
-  putfield Interpretor/state Ljava/lang/String;
-  pop
+/* DONE
+  ldc "init"    +1
+  dup           +1
+  aload         +1
+  swap           0
+  putfield Interpretor/state Ljava/lang/String;  -2
+  pop           -1
 -------->
-  aload
-  ldc "init"
-  putfield Interpretor/state Ljava/lang/String;
+  aload         +1
+  ldc "init"    +1
+  putfield Interpretor/state Ljava/lang/String;  -2
 */
 int simplify_string_decl(CODE **c){
 	int x;
@@ -314,8 +280,8 @@ int simplify_string_decl(CODE **c){
 	return 0;
 }
 
-/* TOOOO CHECK Clovis                                                     ~
-  new Conversion                                        conv
+/* DONE                                                 ~
+  new Conversion (java class)                           conv
   dup                                                   conv conv
   invokenonvirtual Conversion/<init>()V                 conv
   dup                                                   conv conv
@@ -344,7 +310,48 @@ int simplify_object_assignment(CODE **c){
 			return replace(c, 8, makeCODEaload(x, makeCODEnew(o1, makeCODEdup(makeCODEinvokenonvirtual(v1, makeCODEputfield(f1, NULL))))));
 	}
 	return 0;
-} 
+}
+
+
+
+
+/* TOOO CHECK
+ * goto/any branching L1
+ * ...
+ * goto/any branching L2
+ * ...
+ * L1:
+ * L2:
+ * --------->
+ * goto/any branching L2
+ * ...
+ * goto/any branching L2
+ * ...
+ * L1:       (reference count reduced by 1)
+ * L2:       (reference count increased by 1)  
+ */
+
+
+
+
+/* TOOO CHECK
+ * iconst_k1  k1!=0   +1
+ * if_icmpne l1       -2
+ * iconst_k2  k2==0   +1  1/2
+ * goto l2
+ * l1:
+ * iconst_k3  k3==1   +1  2/2
+ * l2:
+ * ifeq l3            -1
+ * --------->
+ * iconst_k1  k1!=0   +1
+ * isub               -1
+ * ifeq l3            -1
+ * 
+ * Also works with iloads instead of iconst
+ * Also works with any kind of comparison
+ * 		substract and use the comparison ifeq... with 0
+ */
 
 void init_patterns(void) {
 	ADD_PATTERN(simplify_multiplication_right);
@@ -358,8 +365,6 @@ void init_patterns(void) {
 	ADD_PATTERN(simplify_goto_goto);
 	ADD_PATTERN(simplify_comp_not_eq_zero);
 	ADD_PATTERN(simplify_comp_eq_zero);
-	/*ADD_PATTERN(simplify_ifeq);
-	ADD_PATTERN(simplify_ifne);*/
 	ADD_PATTERN(simplify_string_decl);
 	ADD_PATTERN(simplify_object_assignment);
 }
